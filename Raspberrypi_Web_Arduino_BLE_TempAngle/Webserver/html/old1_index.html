@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<!-- JQuery -->
+	<script src="js/jquery-3.5.0.min.js"></script>
+	<script src="js/jquery-ui.js"></script> 
+	<!-- D3 js -->
+	<script src="js/d3.v4.js"></script> 
+	<!-- Bootstrap -->
+	<script src="js/bootstrap501/js/bootstrap.min.js" ></script>
+	<link rel="stylesheet" href="js/bootstrap501/css/bootstrap.min.css">
+	
+	
+	
+</head>
+
+<style type="text/css">
+/* 13. Basic Styling with CSS */
+
+/* Style the lines by removing the fill and applying a stroke */
+.line {
+    fill: none;
+    stroke: #ffab00;
+    stroke-width: 3;
+}
+  
+.overlay {
+  fill: none;
+  pointer-events: all;
+}
+
+/* Style the dots by assigning a fill and stroke */
+.dot {
+    fill: #ffab00;
+    stroke: #fff;
+}
+  
+  .focus circle {
+  fill: none;
+  stroke: steelblue;
+}
+
+</style>
+
+	
+<body>
+
+<div class="bg">
+	<div class="container">
+
+		<div class="row">
+			<div class="col-sm-12">
+				<h1>Arduino Nano 33 sense monitor</h1>
+			</div>
+		</div>	
+
+		<div class="row">
+			<div class="col-sm-3">
+				<div id=message></div>
+				<button type="button" id=btnStart onclick="StartStopSensing('ON')">Start sensing</button>
+				<button type="button" id=btnStop  onclick="StartStopSensing('OFF')">Stop sensing</button>
+				<div id=SenseTable></div>
+			</div>
+			<div class="col-sm-9">
+				<div id=SenseGraph></div>
+			</div>
+		</div>
+
+	</div>
+</div>	
+	
+<script>
+
+var KeepSensing = true ;
+
+function StartStopSensing(SS) {
+	if (SS=='ON') {
+		KeepSensing = true ; 
+		document.getElementById("message").innerHTML = "Started sensing<br>" ;
+		Sensing() ;
+	} else {
+		KeepSensing = false; 
+		document.getElementById("message").innerHTML = "Stopped sensing<br>" ;
+	}
+}
+
+document.getElementById("message").innerHTML = "Start sensing<br>" ;
+Sensing() ;
+
+function Sensing() {
+	$.get({url: 'ArduinoNano33/ArduinoNano33.table', cache: false}).done( function(data) {
+		Show_ResultTable(data) ;
+		Show_LineChart(data) ;
+		document.getElementById("message").innerHTML += "." ;
+		if (KeepSensing) { setTimeout(function() {Sensing(); }, 5000) ; }
+	}) ;
+}
+
+function  Show_ResultTable(data) {
+	var TableBody = '<table class=table1 >' ;
+	data = data.split(/\n/);
+	// the table header
+	var items = data[0].split(/\t/); 
+	TableBody += '<thead><tr><th>' + items.join('</th><th>') + '</th></tr></thead>' ;
+	// the table body
+	TableBody += '<tbody>'; 
+	for(var i = 1; i < data.length-1; i++){	
+		items = data[i].split(/\t/);
+		if (items.length>2) { // skip blank rows
+			TableBody += '<tr class=DNA ><td>' + items.join('</td><td>') + '</td></tr>' ;
+		}	
+	}
+	TableBody +=  '</tbody></table>' ;
+	document.getElementById("SenseTable").innerHTML = TableBody ;
+	
+}
+
+
+// set the dimensions and margins of the graph
+var margin = {top: 10, right: 30, bottom: 30, left: 60},
+	width = 460 - margin.left - margin.right,
+	height = 400 - margin.top - margin.bottom;
+
+// append the svg object to the body of the page
+var svg = d3.select("#SenseGraph")
+  .append("svg")
+	.attr("width", width + margin.left + margin.right)
+	.attr("height", height + margin.top + margin.bottom)
+  .append("g")
+	.attr("transform",
+		  "translate(" + margin.left + "," + margin.top + ")");
+	
+
+function Show_LineChart(data) {
+
+	d3.tsv('ArduinoNano33/ArduinoNano33.table?_=' + new Date().getTime(),
+		function(d){ 
+			return { time : d.time, value : d.temp }  },
+			function(data) {
+
+				// Add X axis 
+				var x = d3.scaleLinear()
+				  .domain([0, d3.max(data, function(d) { return +d.time; })])
+				  .range([ 0, width ]);
+				// Add Y axis
+				var y = d3.scaleLinear()
+				  .domain([d3.min(data, function(d) { return +d.value; }), d3.max(data, function(d) { return +d.value; })])
+				  .range([ height, 0 ]);
+				
+				svg.selectAll("g").remove();
+				svg.append("g")
+				  .attr("transform", "translate(0," + height + ")")
+				  .call(d3.axisBottom(x));
+				svg.append("g")
+				  .call(d3.axisLeft(y));
+
+				// Add the line
+				svg.selectAll("path.line").remove();
+				svg.append("path")
+					.datum(data)
+				  .attr("class", "line")
+				  .attr("d", d3.line()
+					.x(function(d) { return x(d.time) })
+					.y(function(d) { return y(d.value) })
+					)
+			}
+	) ; 
+
+}
+
+</script>
+</body>
+</html>

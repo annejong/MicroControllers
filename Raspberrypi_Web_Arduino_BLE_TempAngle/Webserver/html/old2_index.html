@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<!-- JQuery -->
+	<script src="js/jquery-3.5.0.min.js"></script>
+	<script src="js/jquery-ui.js"></script> 
+	<!-- D3 js -->
+	<script src="js/d3.v4.js"></script> 
+	<!-- Bootstrap -->
+	<script src="js/bootstrap501/js/bootstrap.min.js" ></script>
+	<link rel="stylesheet" href="js/bootstrap501/css/bootstrap.min.css">
+	
+	
+	
+</head>
+
+<style type="text/css">
+
+	tr:hover {	background-color: #cadcde;	}
+	tr:nth-child(even) {background-color: #f2f2f2;}
+	th { background-color: #096e75;  color: #f2feff;  text-align: center; }
+	td { padding:2px 10px 2px 3px; }
+		
+	.buttonDownload {
+		background-color: #b33c00; 
+		border: none;
+		color: white;
+		padding: 4px 24px;
+		text-align: center;
+		text-decoration: none;
+		display: inline-block;
+		font-size: 12px;
+		width: 200px;
+	}
+
+	.footer { font-size: 12px; line-height: 90%; text-align: right; }
+
+	/* Style the lines by removing the fill and applying a stroke */
+	.line {
+		fill: none;
+		stroke: #ffab00;
+		stroke-width: 3;
+	}
+	  
+	.overlay {
+	  fill: none;
+	  pointer-events: all;
+	}
+
+	/* Style the dots by assigning a fill and stroke */
+	.dot {
+		fill: #ffab00;
+		stroke: #fff;
+	}
+	  
+	  .focus circle {
+	  fill: none;
+	  stroke: steelblue;
+	}
+	
+	
+	.ButtonSenseSelect {
+		background-color: #008080; 
+		border: none;
+		color: white;
+		padding: 2px 6px 2px 6px;
+		text-align: center;
+		text-decoration: none;
+		display: inline-block;
+		font-size: 12px;
+		width: 200px;
+		
+	}
+	
+	
+	/* The switch - the box around the slider */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+/* Hide default HTML checkbox */
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* The slider */
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: red;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: green;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(26px);
+  -ms-transform: translateX(26px);
+  transform: translateX(26px);
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+
+</style>
+
+	
+<body>
+
+<div class="bg">
+	<div class="container">
+
+		<div class="row">
+			<div class="col-sm-12">
+				<h1>Arduino Nano 33 sense monitor</h1>
+			</div>
+		</div>	
+
+		<div class="row">
+			<div class="col-sm-3">
+				<div id=selectSense></div>
+				<div id=SenseSelected></div>
+				<div>
+					<hr>
+					Sensing ON/OFF 
+					<label class='switch'>
+						<input id=robot_chk type=checkbox name=notarobot001 value=notarobot001 onchange="StartStopSensing()" checked>
+						<span class='slider round'></span>
+					</label>
+				</div>	
+				<div id=message></div>
+				<div id=SenseTable></div>
+			</div>
+			<div class="col-sm-9">
+				<div id=SenseGraph></div>
+			</div>
+		</div>
+
+	</div>
+</div>	
+	
+<script>
+
+var KeepSensing = true ;
+var feature = 'temp' ;
+
+function StartStopSensing() {
+	if (KeepSensing) {
+		KeepSensing = false ; 
+		document.getElementById("message").innerHTML = "Stopped sensing<br>" ;
+	} else {
+		KeepSensing = true; 
+		document.getElementById("message").innerHTML = "Started sensing<br>" ;
+	}
+}
+
+document.getElementById("message").innerHTML = "Start sensing<br>" ;
+MakeRadio() ;
+Sensing() ;
+
+function MakeRadio() {
+	$.get({url: 'ArduinoNano33/ArduinoNano33.table', cache: false}).done( function(data) {
+		data = data.split(/\n/);
+		// the table header
+		var items = data[0].split(/\t/); 
+		var innerHTML = '';
+		var checked = "checked" ;
+		for(var i = 1; i < items.length; i++) {
+			innerHTML += "<button class=ButtonSenseSelect type=button onclick=SenseSelected(\""+items[i]+"\")>"+items[i]+"</button><br>";
+			checked = "" ;
+		}	
+		document.getElementById("selectSense").innerHTML = innerHTML ;
+
+	}) ;
+}
+
+function SenseSelected(featureSelected) {
+	document.getElementById("SenseSelected").innerHTML = "Selected feature="+featureSelected ;
+	feature = featureSelected ;
+	Sensing() ;
+}
+
+
+function Sensing() {
+	$.get({url: 'ArduinoNano33/ArduinoNano33.table', cache: false}).done( function(data) {
+		Show_ResultTable(data) ;
+		Show_LineChart(data, feature) ;
+		if (KeepSensing) { setTimeout(function() {Sensing(); }, 1000) ; }
+	}) ;
+}
+
+function  Show_ResultTable(data) {
+	var TableBody = '<table class=table1 >' ;
+	data = data.split(/\n/);
+	// the table header
+	var items = data[0].split(/\t/); 
+	TableBody += '<thead><tr><th>' + items.join('</th><th>') + '</th></tr></thead>' ;
+	// the table body
+	TableBody += '<tbody>'; 
+	for(var i = 1; i < data.length; i++){	
+		items = data[i].split(/\t/);
+		if (items.length>2) { // skip blank rows
+			TableBody += '<tr class=DNA ><td>' + items.join('</td><td>') + '</td></tr>' ;
+		}	
+	}
+	TableBody +=  '</tbody></table>' ;
+	document.getElementById("SenseTable").innerHTML = TableBody ;
+	
+}
+
+
+// set the dimensions and margins of the graph
+var margin = {top: 10, right: 30, bottom: 30, left: 60},
+	width = 660 - margin.left - margin.right,
+	height = 600 - margin.top - margin.bottom;
+
+// append the svg object to the body of the page
+var svg = d3.select("#SenseGraph")
+  .append("svg")
+	.attr("width", width + margin.left + margin.right)
+	.attr("height", height + margin.top + margin.bottom)
+  .append("g")
+	.attr("transform",
+		  "translate(" + margin.left + "," + margin.top + ")");
+	
+
+function Show_LineChart(data, feature) {
+
+	d3.tsv('ArduinoNano33/ArduinoNano33.table?_=' + new Date().getTime(),
+		function(d){ 
+			if (feature == 'temp')         { d.value = d.temp }
+			else if (feature == 'hum')     { d.value = d.hum } 
+			else if (feature == 'pres')    { d.value = d.pres } 
+			else if (feature == 'degreeX') { d.value = d.degreeX } 
+			else if (feature == 'degreeY') { d.value = d.degreeY } 
+			return { time : d.time, value : d.value }  },
+			function(data) {
+
+				// Add X axis 
+				var x = d3.scaleLinear()
+				  .domain([0, d3.max(data, function(d) { return +d.time; })])
+				  .range([ 0, width ]);
+				// Add Y axis
+				var y = d3.scaleLinear()
+				  .domain([d3.min(data, function(d) { return +d.value; }), d3.max(data, function(d) { return +d.value; })])
+				  .range([ height, 0 ]);
+				
+				svg.selectAll("g").remove();
+				svg.append("g")
+				  .attr("transform", "translate(0," + height + ")")
+				  .call(d3.axisBottom(x));
+				svg.append("g")
+				  .call(d3.axisLeft(y));
+
+				// Add the line
+				svg.selectAll("path.line").remove();
+				svg.append("path")
+					.datum(data)
+				  .attr("class", "line")
+				  .attr("d", d3.line()
+					.x(function(d) { return x(d.time) })
+					.y(function(d) { return y(d.value) })
+					)
+			}
+	) ; 
+
+}
+
+</script>
+</body>
+</html>
