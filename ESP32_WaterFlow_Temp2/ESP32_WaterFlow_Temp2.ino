@@ -1,9 +1,25 @@
 /*
 
 1) YF-B7 Water Flow Sensor met Temperatuur Sensor - Messing - G1/2"
-  van https://www.tinytronics.nl/
+  € 7 by https://www.tinytronics.nl/
 
-2) NTC Thermistor: Temp ESP32 een ADC heeft van 0 - 4095
+2) Nieuwe Ultra-Stille 12V Dc Core Solar Hot Koelwater Circulatie Borstelloze Mini Elektrische Dompelpomp Food Grade
+€ 16 by https://dutch.alibaba.com/
+
+3) Elektronica van https://www.amazon.nl/
+Motor speed control L298N
+Digital Temp DS18B2
+SSD1306 OLED display
+ESP32; AZDelivery ESP-32 
+
+
+OLED  128 x 64 px
+http://oleddisplay.squix.ch/#/home
+
+
+
+
+NOTE: NTC Thermistor: Temp ESP32 een ADC heeft van 0 - 4095
    Connect the 50k NTC to GPIO 4 and 3.3V (no direction), connect GPIO4 to GND with 10k resistor
 The NTC values were completely wrong, to solve this I boiled water and insert the NTC and DS18B20
 let water cool slowly and record the Digital temp and the Voltage on GPIO4
@@ -11,11 +27,6 @@ Perform polynomal regression to correlate Volt and Temp
 https://stats.blue/Stats_Suite/polynomial_regression_calculator.html
 Vout  y=7.3212x3−33.5077x2+85.8347x−19.269
 
-
-3) Digital Temp DS18B2
-
-4) OLED  128 x 64 px
-http://oleddisplay.squix.ch/#/home
     
  */
 
@@ -138,7 +149,7 @@ void setup()
 
 
 float Average_NTCtemp(float newTemp) {
-  // NTC is very fluctuating so here we return the average of NTCarraySize measurements 
+  // NTC is highly fluctuating so here we return the average  of "NTCarraySize" measurements 
   float NTCsum = 0 ;
   for (int i=0; i<NTCarraySize-1; i++) { 
     NTCarray[i] = NTCarray[i+1]; 
