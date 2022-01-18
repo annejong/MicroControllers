@@ -7,6 +7,7 @@
 € 16 by https://dutch.alibaba.com/
 
 3) Elektronica van https://www.amazon.nl/
+This is also the 5V Power Supply for the ESP32. Input 12V (can be between 5-35V)
 Motor speed control L298N
 Digital Temp DS18B2
 SSD1306 OLED display
@@ -32,6 +33,7 @@ Vout  y=7.3212x3−33.5077x2+85.8347x−19.269
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <BluetoothSerial.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -39,6 +41,10 @@ Vout  y=7.3212x3−33.5077x2+85.8347x−19.269
 #include "font.h"
 
 #define LED_BUILTIN 2
+
+// ===================================== PARAMETERS ===================================================
+
+float TEMP_DESIRED = 24.0;  // desired final temperature
 
 // ===================================== PIN CONNECTIONS ==============================================
 
@@ -58,12 +64,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 
 // PIN CONNECTIONS; NTC of the YF-B7 Water Flow Sensor; NOTE NTC is inacurate
-// red 3.3V, black GND, Yellow GPIO + 10k -> GND
+// red 3.3V, black GND, Yellow GPIO 4 + 10k -> GND
 int ThermistorPin = 4 ;
 double adcMax = 4095.0; // ADC resolution 12-bit (0-4095)
-double Vs = 3.3;        // supply voltage
+double Vs = 5;        // supply voltage
 const int NTCarraySize = 10 ;
 float NTCarray[NTCarraySize] ;      // Always thake the average of 10 measurement 
+
 
 // PIN CONNECTIONS; YF-B7 Water Flow Sensor
 // red 5V, black GND, Yellow GPIO + 10k -> 5V
@@ -94,6 +101,10 @@ const int pwmChannel = 0;
 const int resolution = 8;
 const int minSpeed = 100;  // increase this if the motor does not start
 
+
+// PIN CONNECTION; Potentiometer
+// + to 3.3V; - to GND; middle to GPIO 34
+const int potPin = 34;
 
 // ===================================== SETUP ====================================================
 void IRAM_ATTR pulseCounter()
@@ -178,6 +189,13 @@ float MotorSpeed(float t) {
   return Speed ; 
 }
 
+float Update_Temp_Desired() {
+  float potValue = analogRead(potPin);
+  // Value is between 0 and 4095, here we normalize to 20; temp will be between 15 - 35
+  float result = int(150+potValue*200/4095)  ; // round 1 decimal
+  return result/10;
+}
+
 // ===================================== LOOP ====================================================
 
 
@@ -192,9 +210,11 @@ void loop()
     // NTC analog (inacurate) temperature
     double NTC = analogRead(ThermistorPin) ;
     double Vout = NTC * Vs/adcMax;
-    double Tanne = 7.3212*pow(Vout,3)-33.5077*pow(Vout,2)+85.8347*Vout-19.269 ;
-    Tanne =  Average_NTCtemp(Tanne) ;
+    double Tanne = -5E-06*pow(NTC,2) + 0.0519*NTC - 36; // from Excel Polynomal ^2; y = -5E-06x2 + 0.0519x - 35.693
     
+    Tanne =  Average_NTCtemp(Tanne) ;
+
+   
     // Water flow meter
     pulse1Sec = pulseCount;
     pulseCount = 0;
@@ -213,20 +233,32 @@ void loop()
     // Report
     Serial.println("\t" + String(temperature)+ "\t" + String(NTC) + "\t" +String(Vout)+  "\t" +String(Tanne) +  "\t" +String(Speed) );
 
- 
+    
+    float OLD_TEMP_DESIRED = TEMP_DESIRED ;
+    TEMP_DESIRED = Update_Temp_Desired();
+    if (abs(TEMP_DESIRED - OLD_TEMP_DESIRED) > 0.3) {  // only show if delta temp >0.3°C
+      Serial.println("TEMP_DESIRED = " + String(TEMP_DESIRED));
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(2);
+      display.setCursor(0,0);  display.print("TARGET TEMP") ;
+      display.setCursor(20,40); display.print(FloatToStr(TEMP_DESIRED,1) + (char)247 + "C") ;
+      display.display();
+      delay(500) ;
+    } else {
   
-
-  display.clearDisplay();
-  display.setTextColor(WHITE);
-  display.setTextSize(1);  
-  display.setCursor(0,2);   display.print("Out:") ;
-  display.setCursor(0,19);  display.print("In:") ;
-  display.setTextSize(2);
-  display.setCursor(30,0);  display.print(FloatToStr(temperature,1) + (char)247 + "C") ;
-  display.setCursor(30,17); display.print(FloatToStr(Tanne,1) + (char)247 + "C");
-  display.setCursor(0, 34); display.print(FloatToStr(flowRate,1) + " L/min");
-  display.setCursor(0, 51); display.print(String(totalMilliLitres) + " ml");
-  display.display();
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(1);  
+      display.setCursor(0,2);   display.print("Out:") ;
+      display.setCursor(0,19);  display.print("In:") ;
+      display.setTextSize(2);
+      display.setCursor(30,0);  display.print(FloatToStr(temperature,1) + (char)247 + "C") ;
+      display.setCursor(30,17); display.print(FloatToStr(Tanne,1) + (char)247 + "C");
+      display.setCursor(0, 34); display.print(FloatToStr(flowRate,1) + " L/min");
+      display.setCursor(0, 51); display.print(String(totalMilliLitres) + " ml");
+      display.display();
+    }  
 
     
   }

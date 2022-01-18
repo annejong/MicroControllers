@@ -11,11 +11,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+// ===================================== PARAMETERS ===================================================
+
 int TEMP_THRESHOLD_LOWER = 19; // upper threshold of temperature
 int TEMP_THRESHOLD_UPPER = 20; // lower threshold of temperature
 int TEMP_SAVE = 3 ;  // Overheat protection; TEMP_THRESHOLD_UPPER + TEMP_SAVE
 
-// PARAMETERS
 // UPPER value for the second relay to prevent overheating is relay 1 would fail
 String HEATER_STATUS = "OFF";
 int LOG_INTERVAL = 6 ;// log sample time in seconds
@@ -24,6 +25,8 @@ unsigned long LastShutdown ;
 const int LOG_COUNT_MAX = 20000  ;
 float logValues[LOG_COUNT_MAX] ; 
 int logCount = 0 ;
+
+// ===================================== PIN CONNECTIONS ==============================================
 
 
 // PIN CONNECTIONS relay KY-019 of EZ-Delivery
