@@ -179,10 +179,10 @@ String FloatToStr(float f,int d) {
 
 float MotorSpeed(float t) {
   float Speed=255 ;
-  if (t<20) { Speed=255 ; } 
-  else if (t<22) { Speed=220 ; } 
-  else if (t<24) { Speed=180 ; } 
-  else if (t<26) { Speed=140 ; } 
+  if (t<TEMP_DESIRED-2) { Speed=255 ; } 
+  else if (t<TEMP_DESIRED) { Speed=220 ; } 
+  else if (t<TEMP_DESIRED+2) { Speed=180 ; } 
+  else if (t<TEMP_DESIRED+4) { Speed=140 ; } 
   else { Speed=100 ; } 
  // Serial.println("Speed: " + String(Speed));
   ledcWrite(pwmChannel, Speed); 
@@ -241,7 +241,7 @@ void loop()
       display.clearDisplay();
       display.setTextColor(WHITE);
       display.setTextSize(2);
-      display.setCursor(0,0);  display.print("TARGET TEMP") ;
+      display.setCursor(0,0);  display.print("DESIRED") ;
       display.setCursor(20,40); display.print(FloatToStr(TEMP_DESIRED,1) + (char)247 + "C") ;
       display.display();
       delay(500) ;
