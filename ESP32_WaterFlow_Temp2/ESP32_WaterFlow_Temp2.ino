@@ -1,5 +1,9 @@
 /*
 
+
+
+
+
 1) YF-B7 Water Flow Sensor met Temperatuur Sensor - Messing - G1/2"
   € 7 by https://www.tinytronics.nl/
 
@@ -7,15 +11,13 @@
 € 16 by https://dutch.alibaba.com/
 
 3) Elektronica van https://www.amazon.nl/
-This is also the 5V Power Supply for the ESP32. Input 12V (can be between 5-35V)
-Motor speed control L298N
-Digital Temp DS18B2
+Motor speed control L298N  // pump speed control
+   - Input 12V (can be between 5-35V) connected
+   - 5V Power Supply for the ESP32 is provided by the L298N
+Digital Temp DS18B2   // for measuring the final product
 SSD1306 OLED display
+OLED  128 x 64 px  // http://oleddisplay.squix.ch/#/home
 ESP32; AZDelivery ESP-32 
-
-
-OLED  128 x 64 px
-http://oleddisplay.squix.ch/#/home
 
 
 
@@ -24,9 +26,8 @@ NOTE: NTC Thermistor: Temp ESP32 een ADC heeft van 0 - 4095
    Connect the 50k NTC to GPIO 4 and 3.3V (no direction), connect GPIO4 to GND with 10k resistor
 The NTC values were completely wrong, to solve this I boiled water and insert the NTC and DS18B20
 let water cool slowly and record the Digital temp and the Voltage on GPIO4
-Perform polynomal regression to correlate Volt and Temp
-https://stats.blue/Stats_Suite/polynomial_regression_calculator.html
-Vout  y=7.3212x3−33.5077x2+85.8347x−19.269
+Perform  polynomal regression (e.g. Excel) to correlate ADC value against the digital Temp
+
 
     
  */
@@ -49,8 +50,7 @@ float TEMP_DESIRED = 24.0;  // desired final temperature
 // ===================================== PIN CONNECTIONS ==============================================
 
 // PIN CONNECTIONS; DS18B20 digital thermometer
-// DS18B20 Board connections: red 3-5V;  black GND;  yellow, GPIO 14 and 4.7kOhm -> 3-5V
-// GPIO 27 pin is used to read the data from the DS18B20 (yellow wire)    
+// DS18B20 Board connections: red 5V (or 3.3V);  black GND;  yellow, GPIO 27 and 4.7kOhm -> 5V (or 3.3V)
 const int oneWireBus = 27;  
 OneWire oneWire(oneWireBus); // Setup a oneWire instance to communicate with any OneWire DS18B20 
 DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature sensor 
@@ -63,17 +63,17 @@ DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Tem
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 
-// PIN CONNECTIONS; NTC of the YF-B7 Water Flow Sensor; NOTE NTC is inacurate
-// red 3.3V, black GND, Yellow GPIO 4 + 10k -> GND
+// PIN CONNECTIONS; NTC ; NOTE NTC is inacurate (NTC of the YF-B7 Water Flow Sensor)
+// NTC does not have directions: one to 3.3V and one to GPIO 4 + 10k -> GND
 int ThermistorPin = 4 ;
 double adcMax = 4095.0; // ADC resolution 12-bit (0-4095)
-double Vs = 5;        // supply voltage
+double Vs = 3.3;        // supply voltage
 const int NTCarraySize = 10 ;
 float NTCarray[NTCarraySize] ;      // Always thake the average of 10 measurement 
 
 
 // PIN CONNECTIONS; YF-B7 Water Flow Sensor
-// red 5V, black GND, Yellow GPIO + 10k -> 5V
+// red 3.3V, black GND, Yellow GPIO 26 + 10k -> 5V
 #define WATERFLOWSENSOR  26
 long currentMillis = 0;
 long previousMillis = 0;
@@ -102,7 +102,7 @@ const int resolution = 8;
 const int minSpeed = 100;  // increase this if the motor does not start
 
 
-// PIN CONNECTION; Potentiometer
+// PIN CONNECTION; Potentiometer for temperature nsetting
 // + to 3.3V; - to GND; middle to GPIO 34
 const int potPin = 34;
 
@@ -178,18 +178,19 @@ String FloatToStr(float f,int d) {
 
 
 float MotorSpeed(float t) {
-  float Speed=255 ;
-  if (t<TEMP_DESIRED-2) { Speed=255 ; } 
-  else if (t<TEMP_DESIRED) { Speed=220 ; } 
+  float Speed=100 ;
+  if      (t<TEMP_DESIRED-2) { Speed=255 ; } 
+  else if (t<TEMP_DESIRED)   { Speed=220 ; } 
   else if (t<TEMP_DESIRED+2) { Speed=180 ; } 
   else if (t<TEMP_DESIRED+4) { Speed=140 ; } 
-  else { Speed=100 ; } 
- // Serial.println("Speed: " + String(Speed));
   ledcWrite(pwmChannel, Speed); 
   return Speed ; 
 }
 
 float Update_Temp_Desired() {
+   // TO TRY to set range from 15 - 35 °C
+   // float Temp = floatMap(potValue, 0, 4095, 15, 35);
+  
   float potValue = analogRead(potPin);
   // Value is between 0 and 4095, here we normalize to 20; temp will be between 15 - 35
   float result = int(150+potValue*200/4095)  ; // round 1 decimal
@@ -233,7 +234,8 @@ void loop()
     // Report
     Serial.println("\t" + String(temperature)+ "\t" + String(NTC) + "\t" +String(Vout)+  "\t" +String(Tanne) +  "\t" +String(Speed) );
 
-    
+
+    // Check if user changed the desired temp
     float OLD_TEMP_DESIRED = TEMP_DESIRED ;
     TEMP_DESIRED = Update_Temp_Desired();
     if (abs(TEMP_DESIRED - OLD_TEMP_DESIRED) > 0.3) {  // only show if delta temp >0.3°C

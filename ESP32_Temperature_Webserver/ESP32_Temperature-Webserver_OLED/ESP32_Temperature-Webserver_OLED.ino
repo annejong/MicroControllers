@@ -48,6 +48,7 @@ String strXvalues ;
 float maxTemp ;
 float minTemp ;
 
+
 void setup() {
   Serial.begin(9600);
   Serial.println("Try Connecting to ");
