@@ -211,7 +211,8 @@ void loop()
     // NTC analog (inacurate) temperature
     double NTC = analogRead(ThermistorPin) ;
     double Vout = NTC * Vs/adcMax;
-    double Tanne = -5E-06*pow(NTC,2) + 0.0519*NTC - 36; // from Excel Polynomal ^2; y = -5E-06x2 + 0.0519x - 35.693
+    double Tanne = -2E-06*pow(NTC,2) + 0.028*NTC +1.6668; // from Excel Polynomal ^2; y = -2E-06x2 + 0.028x + 1.6668
+
     
     Tanne =  Average_NTCtemp(Tanne) ;
 

@@ -6,6 +6,8 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Wire.h>    // I2C library
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include "ccs811.h"  // CCS811 library
 #include <Adafruit_SSD1306.h>  // OLED SSD1306
 
@@ -26,30 +28,42 @@ CCS811 ccs811(23); // nWAKE on 23
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 
+// PIN CONNECTIONS; DS18B20 temperature sensor
+// DS18B20; GND, Data,                      VCC    (face flat site)
+// ESP32;   GND, GPIO14 + 4.7kOhm to 3.3V,  3.3V 
+const int oneWireBus = 14;  
+OneWire oneWire(oneWireBus); // Setup a oneWire instance to communicate with any OneWire DS18B20 
+DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature sensor 
+
+
 // ===================================== PARAMETERS ==============================================
 
 // SSID & Password
 const char* ssid = "Hartelijk";  // Enter your SSID here
 const char* password = "Welkomja123";  //Enter your Password here
 WebServer server(80);  // Object of WebServer(HTTP port, 80 is defult)
+String WiFilocalIP = "not connected";
+
+float temperature = 20 ;
 
 int LOG_INTERVAL = 6 ;// log sample time in seconds
 unsigned long LastLogMillis ; 
 const int maxX=1000 ;         // number of measurements in graph
-float CO2[maxX] ;             // CO2 values 
+uint16_t CO2[maxX] ;             // CO2 values 
+uint16_t VOC[maxX] ;             // VOC values 
+float TMP[maxX] ;               // TEMPerature values 
+const int AVG_SIZE = 50 ;           // To take average of CO2 or VOC values    
+uint16_t AVG_eco2[AVG_SIZE] ;
+uint16_t AVG_etvoc[AVG_SIZE] ;
 String CO2_plotvalues ;            // Hold values as a string for plotting
-float VOC[maxX] ;             // CO2 values 
 String VOC_plotvalues ;            // Hold values as a string for plotting
+String TMP_plotvalues ;            // Hold values as a string for plotting
 String HTML = "";
 String X_plotvalues ;
-float maxTemp ;
-float minTemp ;
-float maxCO2 = 32000 ;
-float maxVOC = 32000 ;
 String IAQ_names[5]  = {"excellent","good","moderate","poor","unhealty"}  ; // Standards for Indoor Air Quality (IAQ)
 String IAQ_colors[5] = {"blue","green","yellow","orange","red"}  ; // Standards for Indoor Air Quality (IAQ)
-float CO2_IAQ[4] = {400,1000,2000,5000} ;   // excellent < 400 ppm, good< 1000, etc
-float VOC_IAQ[4] = {65, 220,660, 2200};     // excellent < 65 ppb, good <220,  etc
+uint16_t CO2_IAQ[4] = {400,1000,2000,5000} ;   // excellent < 400 ppm, good< 1000, etc
+uint16_t VOC_IAQ[4] = {65, 220,660, 2200};     // excellent < 65 ppb, good <220,  etc
 
 // ===================================== FUNCTIONS ==============================================
 
@@ -62,14 +76,18 @@ void setup() {
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) { delay(1000);  Serial.print(".");  }
   Serial.println("WiFi connected successfully");
-  Serial.print("Got IP: ");
-  Serial.println(WiFi.localIP());  //Show ESP32 IP on serial
+  WiFilocalIP = WiFi.localIP().toString() ;
+  Serial.println("Got IP: "+ WiFilocalIP);
 
   // Start Web server
   server.on("/", handle_root);
   server.begin();
   Serial.println("Web server started");
   delay(100); 
+
+  // Start the DS18B20 digital temp sensor
+  Serial.println("Start DS18B20 digital temp sensor");
+  sensors.begin(); 
 
   // Enable I2C
   Wire.begin(); 
@@ -114,7 +132,8 @@ void setup() {
   for (int i = 0; i < maxX; i++) {  X_plotvalues += String(i)+","; }  
   X_plotvalues += String(maxX) + ']' ; // add the last without comma
   // set all initial CO2=400 and VOC=0
-  for (int i = 0; i <= maxX; i++) {  CO2[i] = 400; VOC[i] = 0; }  
+  for (int i = 0; i <= maxX; i++) {  CO2[i] = 400; VOC[i] = 0; TMP[i] = 20; }  
+  for (int i = 0; i < AVG_SIZE; i++) {  AVG_eco2[i] = 400; AVG_etvoc[i] = 0; }  
   
 }
 
@@ -128,19 +147,19 @@ void handle_root() {
 void UpdateHTML() {
   // HTML & CSS contents which display on web server
   HTML = "<html>" ;
-  //HTML += "<script src=https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js></script>";
   HTML += "<script src=https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js></script>";
   HTML += "<body><head><meta http-equiv=refresh content=15></head><h1>Hondsrugbier CO2 and VOC (Volatile Organic Compounds) </h1>" ;
   HTML += "<canvas id=myChart style=width:100%;max-width:1000px></canvas>" ;
   HTML +="<a href=data:application/octet-stream,"+CO2_plotvalues+" download='CO2data.csv'>Download CO2 data</a><br>";
-  HTML +="<a href=data:application/octet-stream,"+VOC_plotvalues+" download='VOCdata.csv'>Download VOC data</a>";
-  // HTML += "<br><br>Temp values<hr><br>"+CO2_plotvalues+"<br><hr>" ;
+  HTML +="<a href=data:application/octet-stream,"+VOC_plotvalues+" download='VOCdata.csv'>Download VOC data</a><br>";
+  HTML +="<a href=data:application/octet-stream,"+TMP_plotvalues+" download='TMPdata.csv'>Download TMP data</a>";
   // Add the chart.js script
   HTML += " \
   <script>                                                     \
     var xValues = "+X_plotvalues+";      \
     var CO2values = "+CO2_plotvalues+";                  \
     var VOCvalues = "+VOC_plotvalues+";                  \
+    var TMPvalues = "+TMP_plotvalues+";                  \
     new Chart('myChart', {                                                                                        \
       type:'line',                                                                                                \
       data: {                                                                                                     \
@@ -150,18 +169,26 @@ void UpdateHTML() {
       yAxisID: 'CO2',                                                                                         \
           fill: false,                                                                                            \
           lineTension: 0.3,                                                                                       \
-          backgroundColor:'rgba(0,128,0,1.0)',                                                                    \
-          borderColor:'rgba(0,128,0,0.1)',                                                                        \
+          backgroundColor:'rgba(85,156,44,1.0)',                                                                    \
+          borderColor:'rgba(0,0,255,0.1)',                                                                        \
           data: CO2values                                                                                         \
         }, {                                                                                                      \
           label: 'VOC',                                                                                           \
       yAxisID: 'VOC',                                                                                         \
           fill: false,                                                                                            \
           lineTension: 0.3,                                                                                       \
-          backgroundColor:'rgba(0,0,255,1.0)',                                                                    \
+          backgroundColor:'rgba(26,122,186,1.0)',                                                                    \
           borderColor:'rgba(0,0,255,0.1)',                                                                        \
           data: VOCvalues                                                                                         \
-        }]                                                                                                        \
+        },{                                                                                                      \
+          label: 'TMP',                                                                                           \
+      yAxisID: 'TMP',                                                                                         \
+          fill: false,                                                                                            \
+          lineTension: 0.3,                                                                                       \
+          backgroundColor:'rgba(245,95,49,1.0)',                                                                    \
+          borderColor:'rgba(0,0,255,0.1)',                                                                        \
+          data: TMPvalues                                                                                         \
+        } ]                                                                                                        \
       },                                                                                                          \
       options: {                                                                                                  \
         legend: {display: false},                                                                                 \
@@ -171,16 +198,23 @@ void UpdateHTML() {
         title: { display: true, text: 'Time in minutes'}                                          \
       },                                                                                                    \
       CO2: {                                                                                                \
-          type: 'linear',                                                                                   \
+        type: 'linear',                                                                                   \
         display: true,                                                                                    \
         position: 'left',                                                                                 \
         title: { display:true, text: 'ppm CO2' }                                                          \
       },                                                                                                    \
       VOC: {                                                                                                \
-          type: 'linear',                                                                                   \
+        type: 'linear',                                                                                   \
         display: true,                                                                                    \
         position: 'right',                                                                                \
         title: { display:true, text: 'ppb VOC (Volatile Organic Compounds)' },                            \
+        grid: { drawOnChartArea: false }                                                                  \
+      },                                                                                                    \
+      TMP: {                                                                                                \
+        type: 'linear',                                                                                   \
+        display: true,                                                                                    \
+        position: 'right', suggestedMin: 10, suggestedMax: 40,                                                                                \
+        title: { display:true, text: 'Temperature in C' },                            \
         grid: { drawOnChartArea: false }                                                                  \
       }                                                                                                     \
         }                                                                                                         \
@@ -193,56 +227,99 @@ void UpdateHTML() {
 }
 
 
-String ArrayToString(float arr[]) {
+String ArrayToString(uint16_t arr[]) {
   String Str = "[";
   for (int i = 0; i < maxX-1; i++) {    Str += String(arr[i]) + "," ;   }
   return Str += "]";
 }
 
+String ArrayTempToString(float arr[]) {
+  String Str = "[";
+  for (int i = 0; i < maxX-1; i++) {    Str += FloatToStr(arr[i],1) + "," ;   }
+  return Str += "]";
+}
 
-void add_CO2(float t) {
+
+void add_CO2(uint16_t t) {
   // Shift array and Add CO2 value 
   for (int i = 0; i < maxX-1; i++) {    CO2[i] = CO2[i+1] ;   }
   CO2[maxX-1] = t ;
 }
 
-void add_VOC(float t) {
+void add_VOC(uint16_t t) {
   // Shift array and Add VOC value 
   for (int i = 0; i < maxX-1; i++) {    VOC[i] = VOC[i+1] ;   }
   VOC[maxX-1] = t ;
 }
 
 
+void add_TMP(float t) {
+  // Shift array and Add VOC value 
+  for (int i = 0; i < maxX-1; i++) {    TMP[i] = TMP[i+1] ;   }
+  TMP[maxX-1] = t ;
+}
+
+
+void UpdateCO2(uint16_t t) {
+  // Shift array and Add value 
+  for (int i = 0; i < AVG_SIZE-1; i++) { AVG_eco2[i] = AVG_eco2[i+1] ;   }
+  AVG_eco2[AVG_SIZE-1] = t ;
+}
+
+void UpdateVOC(uint16_t t) {
+  // Shift array and Add value 
+  for (int i = 0; i < AVG_SIZE-1; i++) { AVG_etvoc[i] = AVG_etvoc[i+1] ;   }
+  AVG_etvoc[AVG_SIZE-1] = t ;
+}
+
+uint16_t ArrayAverage(uint16_t arr[], int N) {
+  float sum=0; for (int i=0;i<N;i++) {sum+=arr[i];}
+  return round(sum/N) ;
+}
+
 
 void UpdateCCS811values(uint16_t eco2, uint16_t etvoc) {
+  UpdateCO2(eco2) ;   // log last N=AVG_SIZE values
+  UpdateVOC(etvoc) ;  // log last N=AVG_SIZE values
   Serial.print("CO2 " + String(eco2)+ " ppm   "); 
   Serial.println("eTVOC "+String(etvoc)+ " ppb");
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setTextSize(2);
   display.setCursor(0,0);  display.print("CO2 " + String(eco2)) ;
-  display.setCursor(0,34); display.print("VOC " + String(etvoc)) ;
+  display.setCursor(0,19); display.print("VOC " + String(etvoc)) ;
+  display.setCursor(0,38); display.print("TMP " + FloatToStr(temperature,1)) ;
   display.setTextSize(1);
-  display.setCursor(100,6); display.print("ppm") ;
-  display.setCursor(100,40); display.print("ppb") ;
+  display.setCursor(100,6);  display.print("ppm") ;
+  display.setCursor(100,25); display.print("ppb") ;
+  display.setCursor(10,56);  display.print(WiFilocalIP) ;
   display.display();
   if (millis() - LastLogMillis > 1000*LOG_INTERVAL) {  // log values to web server
     LastLogMillis = millis();
-    Serial.println("Log data");
-    add_CO2(eco2) ;
-    add_VOC(etvoc) ;
+    Serial.println("Log data of the average of last "+String(AVG_SIZE)+" measurements");
+    add_CO2(ArrayAverage(AVG_eco2,  AVG_SIZE)) ;
+    add_VOC(ArrayAverage(AVG_etvoc, AVG_SIZE)) ;
+    add_TMP(temperature) ;
     CO2_plotvalues =  ArrayToString(CO2) ; // update the values for plotting  
     VOC_plotvalues =  ArrayToString(VOC) ; // update the values for plotting  
-    maxCO2 = 0 ;   for (int i = 0; i < maxX; i++) { maxCO2 = max(maxCO2, CO2[i]); } 
-    maxVOC = 0 ;   for (int i = 0; i < maxX; i++) { maxVOC = max(maxVOC, VOC[i]); } 
+    TMP_plotvalues =  ArrayTempToString(TMP) ; // update the values for plotting  
     UpdateHTML();
-    
-    
   }  
 }
 
+String FloatToStr(float f,int d) {
+  int decimal = round((f - int(f)) * pow(10,d)) ; 
+  return String(int(f)) + "." + String(decimal) ;
+}
+
+
 void loop() {
   // Read
+  
+  sensors.requestTemperatures();  // read the temperature
+  temperature = sensors.getTempCByIndex(0);
+  Serial.println("Current temp = "+FloatToStr(temperature,1)+"°C  ") ;
+  
   uint16_t eco2, etvoc, errstat, raw;
   ccs811.read(&eco2,&etvoc,&errstat,&raw); 
   if( errstat==CCS811_ERRSTAT_OK ) { 
