@@ -1,0 +1,6 @@
+You Need 2x ESP32
+One for detecting motion: PIR_Sender + TM1637Display 
+One for for receiving the motion: receiver_Buzzer
+
+Communication is via ESP_NOW
+

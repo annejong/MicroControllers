@@ -10,16 +10,17 @@
 #include <DallasTemperature.h>
 #include "ccs811.h"  // CCS811 library
 #include <Adafruit_SSD1306.h>  // OLED SSD1306
+#include "Arduino.h"
 
 // ===================================== PIN CONNECTIONS ==============================================
 
-// PIN CONNECTIONS; CCS811 air sensor with nWAKE to 23 (or GND)
+// PINS; CCS811 air sensor with nWAKE to 23 (or GND)
 // CCS811; VCC,  GND, SCL,    SDA,    WAK,    INT, RST, ADD
 // ESP32 ; 3.3V, GND, GPIO22, GPIO21, GPIO23,  -    -    -
 CCS811 ccs811(23); // nWAKE on 23
 
 
-// PIN CONNECTIONS; SSD1306 OLED display 
+// PINS; SSD1306 OLED display 
 // SSD1306; GND,  VCC,   SCL,    SDA
 // ESP32  ; GND,  3.3V,  GPIO22, GPIO21
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -28,13 +29,24 @@ CCS811 ccs811(23); // nWAKE on 23
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 
-// PIN CONNECTIONS; DS18B20 temperature sensor
+// PINS; DS18B20 temperature sensor
 // DS18B20; GND, Data,                      VCC    (face flat site)
 // ESP32;   GND, GPIO14 + 4.7kOhm to 3.3V,  3.3V 
 const int oneWireBus = 14;  
 OneWire oneWire(oneWireBus); // Setup a oneWire instance to communicate with any OneWire DS18B20 
 DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature sensor 
 
+
+// PINs; leds
+const int ledPinGreen = 32 ; 
+const int ledPinBlue = 33 ; 
+const int ledPinYellow = 25 ; 
+const int ledPinRed = 26 ; 
+int brightness = 200;    // how bright the LED is; 0-255
+const int ledGreen = 0; // green on channel 0
+const int ledBlue = 1; // green on channel 0
+const int ledYellow = 2; // green on channel 0
+const int ledRed = 3; // green on channel 0
 
 // ===================================== PARAMETERS ==============================================
 
@@ -46,9 +58,9 @@ String WiFilocalIP = "not connected";
 
 float temperature = 20 ;
 
-int LOG_INTERVAL = 6 ;// log sample time in seconds
+int LOG_INTERVAL = 60 ;// log sample time in seconds
 unsigned long LastLogMillis ; 
-const int maxX=1000 ;         // number of measurements in graph
+const int maxX=1440 ;         // number of measurements in graph 24 x 60 = 1440 = 1 day
 uint16_t CO2[maxX] ;             // CO2 values 
 uint16_t VOC[maxX] ;             // VOC values 
 float TMP[maxX] ;               // TEMPerature values 
@@ -56,14 +68,15 @@ const int AVG_SIZE = 50 ;           // To take average of CO2 or VOC values
 uint16_t AVG_eco2[AVG_SIZE] ;
 uint16_t AVG_etvoc[AVG_SIZE] ;
 String CO2_plotvalues ;            // Hold values as a string for plotting
+String CO2_plotcolors ;            // Hold Threshold colors as a string for plotting
 String VOC_plotvalues ;            // Hold values as a string for plotting
 String TMP_plotvalues ;            // Hold values as a string for plotting
 String HTML = "";
 String X_plotvalues ;
 String IAQ_names[5]  = {"excellent","good","moderate","poor","unhealty"}  ; // Standards for Indoor Air Quality (IAQ)
-String IAQ_colors[5] = {"blue","green","yellow","orange","red"}  ; // Standards for Indoor Air Quality (IAQ)
-uint16_t CO2_IAQ[4] = {400,1000,2000,5000} ;   // excellent < 400 ppm, good< 1000, etc
-uint16_t VOC_IAQ[4] = {65, 220,660, 2200};     // excellent < 65 ppb, good <220,  etc
+String IAQ_colors[5] = {"green","blue","orange","red"}  ; // Standards for Indoor Air Quality (IAQ)
+uint16_t CO2_IAQ[5] = {1000,2000,2500,3000, 32000} ;   // excellent < 1000 ppm, unhealty > 2500, etc
+uint16_t VOC_IAQ[5] = {65, 220,660, 2200, 32000};     // excellent < 65 ppb, unhealty > 2200,  etc
 
 // ===================================== FUNCTIONS ==============================================
 
@@ -125,6 +138,17 @@ void setup() {
   display.display();
   delay(5000); 
 
+  // LEDs
+  ledcAttachPin(ledPinGreen, ledGreen); // assign a led pins to a channel
+  ledcAttachPin(ledPinBlue, ledBlue); // assign a led pins to a channel
+  ledcAttachPin(ledPinYellow, ledYellow); // assign a led pins to a channel
+  ledcAttachPin(ledPinRed, ledRed); // assign a led pins to a channel
+  ledcSetup(ledGreen, 4000, 8); // channel, freq, resolution 12 kHz PWM, 8-bit resolution
+  ledcSetup(ledBlue, 4000, 8); // channel, freq, resolution 12 kHz PWM, 8-bit resolution
+  ledcSetup(ledYellow, 4000, 8); // channel, freq, resolution 12 kHz PWM, 8-bit resolution
+  ledcSetup(ledRed, 4000, 8); // channel, freq, resolution 12 kHz PWM, 8-bit resolution
+  
+
   // Setting Plotvalues
   LastLogMillis = millis();  //initial start time
   // Make xValues string
@@ -169,8 +193,8 @@ void UpdateHTML() {
       yAxisID: 'CO2',                                                                                         \
           fill: false,                                                                                            \
           lineTension: 0.3,                                                                                       \
-          backgroundColor:'rgba(85,156,44,1.0)',                                                                    \
-          borderColor:'rgba(0,0,255,0.1)',                                                                        \
+          backgroundColor: 'rgba(42,130,65,1)', \
+          borderColor: "+CO2_plotcolors+",      \
           data: CO2values                                                                                         \
         }, {                                                                                                      \
           label: 'VOC',                                                                                           \
@@ -232,6 +256,18 @@ String ArrayToString(uint16_t arr[]) {
   for (int i = 0; i < maxX-1; i++) {    Str += String(arr[i]) + "," ;   }
   return Str += "]";
 }
+
+
+String ArrayToColors(uint16_t arr[]) {
+  String Str = "[";
+  for (int i = 0; i < maxX-1; i++) {    
+    for (int j = 0; i < sizeof(CO2_IAQ) - 1; j++) {
+      if (arr[i] < CO2_IAQ[j] ) {    Str += "'" + IAQ_colors[j] + "'," ;  break; } 
+    }
+  }   
+  return Str += "]";
+}
+
 
 String ArrayTempToString(float arr[]) {
   String Str = "[";
@@ -301,6 +337,7 @@ void UpdateCCS811values(uint16_t eco2, uint16_t etvoc) {
     add_VOC(ArrayAverage(AVG_etvoc, AVG_SIZE)) ;
     add_TMP(temperature) ;
     CO2_plotvalues =  ArrayToString(CO2) ; // update the values for plotting  
+    CO2_plotcolors =  ArrayToColors(CO2); 
     VOC_plotvalues =  ArrayToString(VOC) ; // update the values for plotting  
     TMP_plotvalues =  ArrayTempToString(TMP) ; // update the values for plotting  
     UpdateHTML();
@@ -312,10 +349,34 @@ String FloatToStr(float f,int d) {
   return String(int(f)) + "." + String(decimal) ;
 }
 
+void setLeds(uint16_t etvoc) {
+  ledcWrite(ledGreen, 0);
+  ledcWrite(ledBlue, 0);
+  ledcWrite(ledYellow, 0);
+  ledcWrite(ledRed, 0);
+  if (etvoc<100) {
+    ledcWrite(ledGreen, 100);
+  } else if (etvoc<150) {
+     ledcWrite(ledGreen, 50);
+     ledcWrite(ledBlue, 100);
+  } else if (etvoc<200) {
+     ledcWrite(ledBlue, 100);
+  } else if (etvoc<250) {
+     ledcWrite(ledBlue,  50);
+     ledcWrite(ledYellow, 50);
+  } else if (etvoc<300) {
+     ledcWrite(ledYellow, 100);
+  } else if (etvoc<350) {
+     ledcWrite(ledYellow, 50);
+     ledcWrite(ledRed, 50);
+  } else if (etvoc>=350) {
+     ledcWrite(ledRed, 100);
+  } 
+
+}
 
 void loop() {
   // Read
-  
   sensors.requestTemperatures();  // read the temperature
   temperature = sensors.getTempCByIndex(0);
   Serial.println("Current temp = "+FloatToStr(temperature,1)+"°C  ") ;
@@ -324,6 +385,8 @@ void loop() {
   ccs811.read(&eco2,&etvoc,&errstat,&raw); 
   if( errstat==CCS811_ERRSTAT_OK ) { 
     UpdateCCS811values(eco2, etvoc) ;
+     setLeds(etvoc) ;
+
     
   } else if( errstat==CCS811_ERRSTAT_OK_NODATA ) {
     Serial.println("CCS811: waiting for (new) data");
