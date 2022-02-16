@@ -1,8 +1,3 @@
-/*
-  ccs811basic.ino - Demo sketch printing results of the CCS811 digital gas sensor for monitoring indoor air quality from ams.
-  Created by Maarten Pennings 2017 Dec 11
-*/
-
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Wire.h>    // I2C library
